@@ -1,3 +1,4 @@
+use bitcoin_types::connector_args::FinTransferArgs;
 use near_plugins::{access_control, AccessControlRole, AccessControllable, Pausable, Upgradable};
 use near_sdk::borsh::BorshDeserialize;
 use near_sdk::near;
@@ -31,5 +32,10 @@ impl BitcoinConnector {
     #[init]
     pub fn new() -> Self {
         Self {}
+    }
+
+    #[payable]
+    pub fn fin_transfer(&mut self, #[serializer(borsh)] args: FinTransferArgs) {
+
     }
 }

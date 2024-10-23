@@ -25,3 +25,4 @@ serde = { version = "1.0.200", features = ["derive"] }
 near-plugins = { git = "https://github.com/aurora-is-near/near-plugins", tag = "v0.3.0" }
 near-workspaces = "0.12.0"
 bitcoin-types = { path = "types" }
+btc-types = { git = "https://github.com/Near-One/btc-light-client-contract" }

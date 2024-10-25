@@ -1,21 +1,40 @@
 use near_contract_standards::fungible_token::metadata::{
     FungibleTokenMetadata, FungibleTokenMetadataProvider, FT_METADATA_SPEC,
 };
-use near_contract_standards::fungible_token::{
-    FungibleToken, FungibleTokenCore, FungibleTokenResolver,
-};
+use near_contract_standards::fungible_token::{Balance, FungibleToken, FungibleTokenCore, FungibleTokenResolver};
 use near_contract_standards::storage_management::{
     StorageBalance, StorageBalanceBounds, StorageManagement,
 };
-use near_sdk::borsh::BorshSerialize;
+use near_plugins::{access_control, access_control_any, AccessControlRole, AccessControllable, Pausable, Upgradable};
+use near_sdk::borsh::{BorshSerialize, BorshDeserialize};
+use near_sdk::serde::{Deserialize, Serialize};
 use near_sdk::collections::LazyOption;
 use near_sdk::json_types::U128;
 use near_sdk::{
     env, log, near, require, AccountId, BorshStorageKey, NearToken, PanicOnDefault, PromiseOrValue,
 };
 
-#[derive(PanicOnDefault)]
+#[derive(AccessControlRole, Deserialize, Serialize, Copy, Clone)]
+#[serde(crate = "near_sdk::serde")]
+pub enum Role {
+    DAO,
+    PauseManager,
+    UpgradableCodeStager,
+    UpgradableCodeDeployer,
+    Owner
+}
+
 #[near(contract_state)]
+#[derive(Pausable, Upgradable, PanicOnDefault)]
+#[access_control(role_type(Role))]
+#[pausable(manager_roles(Role::PauseManager))]
+#[upgradable(access_control_roles(
+    code_stagers(Role::UpgradableCodeStager, Role::DAO),
+    code_deployers(Role::UpgradableCodeDeployer, Role::DAO),
+    duration_initializers(Role::DAO),
+    duration_update_stagers(Role::DAO),
+    duration_update_appliers(Role::DAO),
+))]
 pub struct OmniBTC {
     token: FungibleToken,
     metadata: LazyOption<FungibleTokenMetadata>,
@@ -33,7 +52,7 @@ enum StorageKey {
 #[near]
 impl OmniBTC {
     #[init]
-    pub fn new() -> Self {
+    pub fn new(owner: AccountId) -> Self {
         require!(!env::state_exists(), "Already initialized");
 
         let metadata = FungibleTokenMetadata {
@@ -46,10 +65,21 @@ impl OmniBTC {
             decimals: 8,
         };
 
-        Self {
+
+        let mut res = Self {
             token: FungibleToken::new(StorageKey::FungibleToken),
             metadata: LazyOption::new(StorageKey::Metadata, Some(&metadata)),
-        }
+        };
+
+        res.acl_init_super_admin(owner.clone());
+        res.acl_grant_role(Role::Owner.into(), owner);
+
+        return res;
+    }
+
+    #[access_control_any(roles(Role::Owner))]
+    pub fn mint(&mut self, receiver_id: AccountId, amount: U128) {
+        self.token.internal_deposit(&receiver_id, Balance::from(amount));
     }
 }
 

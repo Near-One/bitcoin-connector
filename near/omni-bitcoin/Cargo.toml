@@ -1,0 +1,13 @@
+[package]
+name = "omni-bitcoin"
+version = "0.1.0"
+authors = ["Olga Kuniavskaia <olga.kuniavskaia@nearone.org>"]
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+near-sdk.workspace = true
+near-contract-standards.workspace = true

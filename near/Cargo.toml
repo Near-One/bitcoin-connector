@@ -5,6 +5,7 @@ authors = ["Olga Kuniavskaia <olga.kuniavskaia@nearone.org>"]
 resolver = "2"
 members = [
     "connector",
+    "omni-bitcoin"
 ]
 
 [profile.release]

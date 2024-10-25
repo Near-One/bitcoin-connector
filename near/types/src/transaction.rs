@@ -30,7 +30,7 @@ pub struct OutPoint {
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub struct VarInt(pub u64);
 
-trait ConsensusDecoder: Sized {
+pub trait ConsensusDecoder: Sized {
     fn from_bytes(bytes: &[u8], offset: &mut usize) -> Result<Self, &'static str>;
 }
 

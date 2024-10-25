@@ -1,4 +1,5 @@
 use btc_types::hash::H256;
+use crate::transaction::Script::OpReturn;
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Transaction {
@@ -18,7 +19,31 @@ pub struct TxIn {
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub struct TxOut {
     pub value: u64,
-    pub script_pubkey: Vec<u8>,
+    pub script_pubkey: Script,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
+pub enum Script {
+    OpReturn(String),
+    V0P2wpkh(String),
+}
+
+impl ConsensusDecoder for Script {
+    fn from_bytes(bytes: &[u8], offset: &mut usize) -> Result<Self, &'static str> {
+        let script_raw = Vec::<u8>::from_bytes(bytes, offset)?;
+
+        const OP_RETURN: u8 = 0x6a;
+
+        if script_raw[0] == OP_RETURN {
+            return Ok(OpReturn(String::from_utf8(script_raw[2..].to_vec()).unwrap()));
+        }
+
+        if script_raw[0] == 0x00 && script_raw[1] == 0x14 {
+            return Ok(Script::V0P2wpkh(hex::encode(&script_raw[2..])));
+        }
+
+        return Err("Incorrect script");
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
@@ -126,7 +151,7 @@ impl ConsensusDecoder for TxOut {
     fn from_bytes(bytes: &[u8], offset: &mut usize) -> Result<Self, &'static str> {
         let mut txoutput = TxOut {
             value: u64::from_bytes(bytes, offset)?,
-            script_pubkey: Vec::<u8>::from_bytes(bytes, offset)?
+            script_pubkey: Script::from_bytes(bytes, offset)?
         };
 
         Ok(txoutput)

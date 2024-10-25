@@ -1,7 +1,7 @@
 use bitcoin_types::connector_args::FinTransferArgs;
 use near_plugins::{access_control, AccessControlRole, AccessControllable, Pausable, Upgradable};
 use near_sdk::borsh::BorshDeserialize;
-use near_sdk::near;
+use near_sdk::{AccountId, near};
 use near_sdk::serde::{Deserialize, Serialize};
 use near_sdk::PanicOnDefault;
 use bitcoin_types::transaction::{ConsensusDecoder, Script, Transaction};
@@ -28,14 +28,16 @@ pub enum Role {
 ))]
 pub struct BitcoinConnector {
     pub bitcoin_pk: String,
+    pub omni_btc: AccountId
 }
 
 #[near]
 impl BitcoinConnector {
     #[init]
-    pub fn new() -> Self {
+    pub fn new(omni_btc: AccountId) -> Self {
         Self {
-            bitcoin_pk: "396e765f3fd99b894caea7e92ebb6d8764ae5cdd".to_string()
+            bitcoin_pk: "396e765f3fd99b894caea7e92ebb6d8764ae5cdd".to_string(),
+            omni_btc
         }
     }
 
@@ -59,6 +61,8 @@ impl BitcoinConnector {
                 }
             }
         }
+
+
 
 
     }

@@ -4,7 +4,7 @@ use near_sdk::borsh::BorshDeserialize;
 use near_sdk::near;
 use near_sdk::serde::{Deserialize, Serialize};
 use near_sdk::PanicOnDefault;
-use bitcoin_types::transaction::{ConsensusDecoder, Transaction};
+use bitcoin_types::transaction::{ConsensusDecoder, Script, Transaction};
 
 #[derive(AccessControlRole, Deserialize, Serialize, Copy, Clone)]
 #[serde(crate = "near_sdk::serde")]
@@ -42,6 +42,24 @@ impl BitcoinConnector {
     #[payable]
     pub fn fin_transfer(&mut self, #[serializer(borsh)] args: FinTransferArgs) {
         let tx = Transaction::from_bytes(&args.tx_raw, &mut 0).unwrap();
+        let mut value = 0;
+        let mut recipient = None;
+        for tx_output in tx.output {
+            match tx_output.script_pubkey {
+                Script::V0P2wpkh(pk) => {
+                    if pk == self.bitcoin_pk {
+                        value += tx_output.value;
+                    }
+                }
+                Script::OpReturn(account) => {
+                    if recipient != None {
+                        panic!("Tx should contain exactly one OP_RETURN script");
+                    }
+                    recipient = Some(account)
+                }
+            }
+        }
+
 
     }
 }

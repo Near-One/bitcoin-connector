@@ -26,13 +26,17 @@ pub enum Role {
     duration_update_stagers(Role::DAO),
     duration_update_appliers(Role::DAO),
 ))]
-pub struct BitcoinConnector {}
+pub struct BitcoinConnector {
+    pub bitcoin_pk: String,
+}
 
 #[near]
 impl BitcoinConnector {
     #[init]
     pub fn new() -> Self {
-        Self {}
+        Self {
+            bitcoin_pk: "396e765f3fd99b894caea7e92ebb6d8764ae5cdd".to_string()
+        }
     }
 
     #[payable]

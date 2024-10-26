@@ -149,7 +149,7 @@ impl ConsensusDecoder for TxIn {
 
 impl ConsensusDecoder for TxOut {
     fn from_bytes(bytes: &[u8], offset: &mut usize) -> Result<Self, &'static str> {
-        let mut txoutput = TxOut {
+        let txoutput = TxOut {
             value: u64::from_bytes(bytes, offset)?,
             script_pubkey: Script::from_bytes(bytes, offset)?
         };
@@ -162,7 +162,7 @@ impl ConsensusDecoder for Vec<TxIn> {
     fn from_bytes(bytes: &[u8], offset: &mut usize) -> Result<Self, &'static str> {
         let length = VarInt::from_bytes(bytes, offset)?.0 as usize;
         let mut value = vec![];
-        for i in 0..length {
+        for _ in 0..length {
             value.push(TxIn::from_bytes(bytes, offset)?);
         }
         Ok(value)
@@ -173,7 +173,7 @@ impl ConsensusDecoder for Vec<TxOut> {
     fn from_bytes(bytes: &[u8], offset: &mut usize) -> Result<Self, &'static str> {
         let length = VarInt::from_bytes(bytes, offset)?.0 as usize;
         let mut value = vec![];
-        for i in 0..length {
+        for _ in 0..length {
             value.push(TxOut::from_bytes(bytes, offset)?);
         }
         Ok(value)

@@ -16,3 +16,4 @@ borsh.workspace = true
 serde.workspace = true
 near-plugins.workspace = true
 bitcoin-types.workspace = true
+btc-types.workspace = true

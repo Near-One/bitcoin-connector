@@ -1,14 +1,21 @@
 use bitcoin_types::connector_args::FinTransferArgs;
 use near_plugins::{access_control, AccessControlRole, AccessControllable, Pausable, Upgradable};
-use near_sdk::borsh::BorshDeserialize;
-use near_sdk::{AccountId, Gas, near, Promise};
+use near_sdk::borsh::{BorshSerialize, BorshDeserialize};
+use near_sdk::{AccountId, Gas, near, Promise, require, BorshStorageKey};
+use near_sdk::collections::LookupSet;
 use near_sdk::json_types::U128;
 use near_sdk::serde::{Deserialize, Serialize};
 use near_sdk::PanicOnDefault;
 use near_sdk::ext_contract;
 use bitcoin_types::transaction::{ConsensusDecoder, Script, Transaction};
+use btc_types::hash::H256;
 
 const MINT_BTC_GAS: Gas = Gas::from_tgas(10);
+
+#[derive(BorshSerialize, BorshStorageKey)]
+enum StorageKey {
+    FinalisedTransfers,
+}
 
 #[derive(AccessControlRole, Deserialize, Serialize, Copy, Clone)]
 #[serde(crate = "near_sdk::serde")]
@@ -32,7 +39,8 @@ pub enum Role {
 ))]
 pub struct BitcoinConnector {
     pub bitcoin_pk: String,
-    pub omni_btc: AccountId
+    pub omni_btc: AccountId,
+    pub finalised_transfers: LookupSet<H256>
 }
 
 #[ext_contract(ext_omni_bitcoin)]
@@ -49,7 +57,8 @@ impl BitcoinConnector {
     pub fn new(omni_btc: AccountId) -> Self {
         Self {
             bitcoin_pk: "396e765f3fd99b894caea7e92ebb6d8764ae5cdd".to_string(),
-            omni_btc
+            omni_btc,
+            finalised_transfers: LookupSet::new(StorageKey::FinalisedTransfers),
         }
     }
 
@@ -74,6 +83,9 @@ impl BitcoinConnector {
                 }
             }
         }
+
+        require!(self.finalised_transfers.insert(&tx.tx_hash),
+            "The transfer is already finalised");
 
         ext_omni_bitcoin::ext(self.omni_btc.clone())
             .with_static_gas(MINT_BTC_GAS)

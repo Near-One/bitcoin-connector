@@ -13,3 +13,7 @@ near deploy omni_btc.testnet --wasm-file "./target/wasm32-unknown-unknown/releas
 near create bitcoin_connector.testnet --useFaucet
 near deploy bitcoin_connector.testnet --wasm-file "./target/wasm32-unknown-unknown/release/bitcoin_connector.wasm" --init-function "new" --init-args '{"omni_btc": "omni_btc.testnet"}'
 ```
+
+```shell
+near create btc_user.testnet --useFaucet
+```

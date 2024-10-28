@@ -1,4 +1,4 @@
-use btc_types::hash::H256;
+use btc_types::hash::{double_sha256, H256};
 use crate::transaction::Script::OpReturn;
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -7,6 +7,7 @@ pub struct Transaction {
     pub lock_time: u32,
     pub input: Vec<TxIn>,
     pub output: Vec<TxOut>,
+    pub tx_hash: H256,
 }
 
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Debug)]
@@ -65,7 +66,8 @@ impl ConsensusDecoder for Transaction {
             version: 0,
             lock_time: 0,
             input: vec![],
-            output: vec![]
+            output: vec![],
+            tx_hash: double_sha256(bytes)
         };
 
         tx.version = i32::from_bytes(bytes, offset)?;
@@ -259,5 +261,7 @@ mod tests {
         let tx = Transaction::from_bytes(&raw_tx,&mut 0).unwrap();
 
         println!("{:?}", tx);
+        println!("TxHash: {:?}", tx.tx_hash.to_string());
+        assert_eq!(tx.tx_hash.to_string(), "b85d0a81c70009d7a8516076d844f01b791f7dfe14967ee2728a5a2c172ed3db");
     }
 }

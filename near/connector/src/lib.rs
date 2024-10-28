@@ -56,6 +56,7 @@ impl BitcoinConnector {
     #[payable]
     pub fn fin_transfer(&mut self, #[serializer(borsh)] args: FinTransferArgs) -> Promise {
         let tx = Transaction::from_bytes(&args.tx_raw, &mut 0).unwrap();
+
         let mut value = 0;
         let mut recipient = None;
         for tx_output in tx.output {

@@ -1,8 +1,8 @@
 use btc_types::contract_args::ProofArgs;
 use bitcoin_types::connector_args::FinTransferArgs;
-use near_plugins::{access_control, AccessControlRole, AccessControllable, Pausable, Upgradable};
+use near_plugins::{access_control, pause, AccessControlRole, AccessControllable, Pausable, Upgradable};
 use near_sdk::borsh::{BorshSerialize, BorshDeserialize};
-use near_sdk::{AccountId, Gas, near, Promise, require, BorshStorageKey, env, PromiseError};
+use near_sdk::{AccountId, Gas, near, Promise, require, BorshStorageKey, env, PromiseError, PromiseOrValue};
 use near_sdk::collections::LookupSet;
 use near_sdk::json_types::U128;
 use near_sdk::serde::{Deserialize, Serialize};
@@ -10,6 +10,7 @@ use near_sdk::PanicOnDefault;
 use near_sdk::ext_contract;
 use bitcoin_types::transaction::{ConsensusDecoder, Script, Transaction, UTXO};
 use btc_types::hash::H256;
+use near_contract_standards::fungible_token::receiver::FungibleTokenReceiver;
 
 const MINT_BTC_GAS: Gas = Gas::from_tgas(10);
 const VERIFY_TX_GAS: Gas = Gas::from_tgas(100);
@@ -151,5 +152,16 @@ impl BitcoinConnector {
                 .mint(recipient.parse().unwrap(), U128::from(value as u128));
         }
     }
+}
 
+
+#[near]
+impl FungibleTokenReceiver for BitcoinConnector {
+    #[pause(except(roles(Role::DAO)))]
+    fn ft_on_transfer(&mut self,
+                      sender_id: AccountId,
+                      amount: U128,
+                      msg: String) -> PromiseOrValue<U128> {
+        todo!()
+    }
 }

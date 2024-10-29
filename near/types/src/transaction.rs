@@ -1,7 +1,8 @@
+use near_sdk::borsh::{BorshSerialize, BorshDeserialize};
 use btc_types::hash::{double_sha256, H256};
 use crate::transaction::Script::OpReturn;
 
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
 pub struct Transaction {
     pub version: i32,
     pub lock_time: u32,
@@ -10,20 +11,20 @@ pub struct Transaction {
     pub tx_hash: H256,
 }
 
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Debug)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Debug, BorshSerialize, BorshDeserialize)]
 pub struct TxIn {
     pub previous_output: OutPoint,
     pub script_sig: Vec<u8>,
     pub sequence: u32,
 }
 
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Debug)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Debug, BorshSerialize, BorshDeserialize)]
 pub struct TxOut {
     pub value: u64,
     pub script_pubkey: Script,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
+#[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Ord, BorshSerialize, BorshDeserialize)]
 pub enum Script {
     OpReturn(String),
     V0P2wpkh(String),
@@ -47,13 +48,13 @@ impl ConsensusDecoder for Script {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
+#[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Ord, BorshSerialize, BorshDeserialize)]
 pub struct OutPoint {
     pub txid: H256,
     pub vout: u32,
 }
 
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Debug)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Debug, BorshSerialize, BorshDeserialize)]
 pub struct VarInt(pub u64);
 
 pub trait ConsensusDecoder: Sized {

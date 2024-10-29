@@ -1,7 +1,8 @@
+use btc_types::contract_args::ProofArgs;
 use bitcoin_types::connector_args::FinTransferArgs;
 use near_plugins::{access_control, AccessControlRole, AccessControllable, Pausable, Upgradable};
 use near_sdk::borsh::{BorshSerialize, BorshDeserialize};
-use near_sdk::{AccountId, Gas, near, Promise, require, BorshStorageKey};
+use near_sdk::{AccountId, Gas, near, Promise, require, BorshStorageKey, env, PromiseError};
 use near_sdk::collections::LookupSet;
 use near_sdk::json_types::U128;
 use near_sdk::serde::{Deserialize, Serialize};
@@ -11,6 +12,8 @@ use bitcoin_types::transaction::{ConsensusDecoder, Script, Transaction};
 use btc_types::hash::H256;
 
 const MINT_BTC_GAS: Gas = Gas::from_tgas(10);
+const VERIFY_TX_GAS: Gas = Gas::from_tgas(100);
+const FT_TRANSFER_CALLBACK_GAS: Gas = Gas::from_tgas(50);
 
 #[derive(BorshSerialize, BorshStorageKey)]
 enum StorageKey {
@@ -42,6 +45,7 @@ pub struct BitcoinConnector {
     pub omni_btc: AccountId,
     pub finalised_transfers: LookupSet<H256>,
     pub confirmations: u64,
+    pub btc_light_client: AccountId,
 }
 
 #[ext_contract(ext_omni_bitcoin)]
@@ -52,21 +56,54 @@ pub trait ExtOmniBitcoin {
 
 }
 
+#[ext_contract(ext_btc_light_client)]
+pub trait ExtBtcLightClient {
+    fn verify_transaction_inclusion(&self,
+                                    #[serializer(borsh)] args: ProofArgs) -> bool;
+}
+
+
 #[near]
 impl BitcoinConnector {
     #[init]
-    pub fn new(omni_btc: AccountId, confirmations: u64) -> Self {
+    pub fn new(omni_btc: AccountId, confirmations: u64, btc_light_client: AccountId) -> Self {
         Self {
             bitcoin_pk: "396e765f3fd99b894caea7e92ebb6d8764ae5cdd".to_string(),
             omni_btc,
             finalised_transfers: LookupSet::new(StorageKey::FinalisedTransfers),
-            confirmations
+            confirmations,
+            btc_light_client
         }
     }
 
-    #[payable]
     pub fn fin_transfer(&mut self, #[serializer(borsh)] args: FinTransferArgs) -> Promise {
         let tx = Transaction::from_bytes(&args.tx_raw, &mut 0).unwrap();
+
+        let proof_args = ProofArgs {
+            tx_id: tx.tx_hash.clone(),
+            tx_block_blockhash: args.tx_block_blockhash,
+            tx_index: args.tx_index,
+            merkle_proof: args.merkle_proof,
+            confirmations: self.confirmations.clone()
+        };
+
+        ext_btc_light_client::ext(self.btc_light_client.clone())
+            .with_static_gas(VERIFY_TX_GAS)
+            .verify_transaction_inclusion(proof_args)
+            .then(
+                Self::ext(env::current_account_id())
+                    .with_static_gas(FT_TRANSFER_CALLBACK_GAS)
+                    .fin_transfer_callback(tx),
+            )
+    }
+
+    #[private]
+    pub fn fin_transfer_callback(
+        &mut self,
+        #[callback_result] call_result: Result<bool, PromiseError>,
+        #[serializer(borsh)] tx: Transaction
+    ) -> Promise {
+        require!(call_result.unwrap(), "Failed to verify proof");
 
         let mut value = 0;
         let mut recipient = None;

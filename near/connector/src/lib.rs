@@ -3,12 +3,12 @@ use bitcoin_types::connector_args::FinTransferArgs;
 use near_plugins::{access_control, pause, AccessControlRole, AccessControllable, Pausable, Upgradable};
 use near_sdk::borsh::{BorshSerialize, BorshDeserialize};
 use near_sdk::{AccountId, Gas, near, Promise, require, BorshStorageKey, env, PromiseError, PromiseOrValue};
-use near_sdk::collections::{LookupMap, LookupSet};
+use near_sdk::collections::{LookupMap, LookupSet, Vector};
 use near_sdk::json_types::U128;
 use near_sdk::serde::{Deserialize, Serialize};
 use near_sdk::PanicOnDefault;
 use near_sdk::ext_contract;
-use bitcoin_types::transaction::{ConsensusDecoder, NewTransferToBitcoin, Script, Transaction, UTXO};
+use bitcoin_types::transaction::{ConsensusDecoder, NewTransferToBitcoin, OutPoint, Script, Transaction, TxIn, TxOut, UTXO};
 use btc_types::hash::H256;
 use near_contract_standards::fungible_token::receiver::FungibleTokenReceiver;
 use bitcoin_types::bitcoin_connector_events::BitcoinConnectorEvent;
@@ -55,7 +55,7 @@ pub struct BitcoinConnector {
     pub confirmations: u64,
     pub btc_light_client: AccountId,
     pub mpc_signer: AccountId,
-    pub utxos: LookupSet<UTXO>,
+    pub utxos: Vector<UTXO>,
     pub new_transfers: LookupMap<u64, NewTransferToBitcoin>,
     pub min_nonce: u64,
     pub last_nonce: u64,
@@ -91,7 +91,7 @@ impl BitcoinConnector {
             confirmations,
             btc_light_client,
             mpc_signer,
-            utxos: LookupSet::new(StorageKey::UTXOs),
+            utxos: Vector::new(StorageKey::UTXOs),
             new_transfers: LookupMap::new(StorageKey::NewTransfers),
             min_nonce: 0,
             last_nonce: 0,
@@ -134,7 +134,7 @@ impl BitcoinConnector {
                 Script::V0P2wpkh(pk) => {
                     if pk == self.bitcoin_pk {
                         value += tx_output.value;
-                        self.utxos.insert(
+                        self.utxos.push(
                             &UTXO {
                                 txid: tx.tx_hash.clone(),
                                 vout: i as u32,
@@ -161,6 +161,48 @@ impl BitcoinConnector {
                 .with_static_gas(MINT_BTC_GAS)
                 .mint(recipient.parse().unwrap(), U128::from(value as u128));
         }
+    }
+
+    pub fn sign(&mut self) {
+        let (unsigned_tx, utxos) = self.get_unsigned_tx();
+
+    }
+}
+
+impl BitcoinConnector {
+    fn get_unsigned_tx(&mut self) -> (Transaction, Vec<UTXO>) {
+        let utxos = self.get_utxos();
+        let new_transfer_data = self.new_transfers.get(&self.min_nonce).unwrap();
+        self.new_transfers.remove(&self.min_nonce);
+        self.min_nonce += 1;
+
+        let txin = TxIn {
+            previous_output: OutPoint {
+                txid: utxos[0].txid.clone(),
+                vout: utxos[0].vout.clone()
+            },
+            script_sig: vec![],
+            sequence: 0
+        };
+
+        let txout = TxOut {
+            value: new_transfer_data.value,
+            script_pubkey: Script::V0P2wpkh(new_transfer_data.recipient_on_bitcoin)
+        };
+
+        let unsigned_tx = Transaction {
+            version: 2,
+            lock_time: 0,
+            input: vec![txin],
+            output: vec![txout],
+            tx_hash: Default::default()
+        };
+
+        (unsigned_tx, utxos)
+    }
+
+    fn get_utxos(&mut self) -> Vec<UTXO> {
+        vec![self.utxos.pop().unwrap()]
     }
 }
 

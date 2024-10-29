@@ -1,5 +1,6 @@
 use near_sdk::borsh::{BorshSerialize, BorshDeserialize};
 use btc_types::hash::{double_sha256, H256};
+use near_sdk::AccountId;
 use crate::transaction::Script::OpReturn;
 
 #[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
@@ -30,6 +31,13 @@ pub struct UTXO {
     pub vout: u32,
     pub value: u64,
     pub script_pubkey: Script,
+}
+
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Debug, BorshSerialize, BorshDeserialize)]
+pub struct NewTransferToBitcoin {
+    pub sender_id: AccountId,
+    pub recipient_on_bitcoin: String,
+    pub value: u64
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Ord, BorshSerialize, BorshDeserialize)]

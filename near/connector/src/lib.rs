@@ -3,12 +3,12 @@ use bitcoin_types::connector_args::FinTransferArgs;
 use near_plugins::{access_control, pause, AccessControlRole, AccessControllable, Pausable, Upgradable};
 use near_sdk::borsh::{BorshSerialize, BorshDeserialize};
 use near_sdk::{AccountId, Gas, near, Promise, require, BorshStorageKey, env, PromiseError, PromiseOrValue};
-use near_sdk::collections::LookupSet;
+use near_sdk::collections::{LookupMap, LookupSet};
 use near_sdk::json_types::U128;
 use near_sdk::serde::{Deserialize, Serialize};
 use near_sdk::PanicOnDefault;
 use near_sdk::ext_contract;
-use bitcoin_types::transaction::{ConsensusDecoder, Script, Transaction, UTXO};
+use bitcoin_types::transaction::{ConsensusDecoder, NewTransferToBitcoin, Script, Transaction, UTXO};
 use btc_types::hash::H256;
 use near_contract_standards::fungible_token::receiver::FungibleTokenReceiver;
 
@@ -23,6 +23,7 @@ const SIGN_PATH: &str = "bitcoin-connector-1";
 enum StorageKey {
     FinalisedTransfers,
     UTXOs,
+    NewTransfers,
 }
 
 #[derive(AccessControlRole, Deserialize, Serialize, Copy, Clone)]
@@ -52,7 +53,10 @@ pub struct BitcoinConnector {
     pub confirmations: u64,
     pub btc_light_client: AccountId,
     pub mpc_signer: AccountId,
-    pub utxos: LookupSet<UTXO>
+    pub utxos: LookupSet<UTXO>,
+    pub new_transfers: LookupMap<u64, NewTransferToBitcoin>,
+    pub min_nonce: u64,
+    pub last_nonce: u64,
 }
 
 #[ext_contract(ext_omni_bitcoin)]
@@ -85,6 +89,9 @@ impl BitcoinConnector {
             btc_light_client,
             mpc_signer,
             utxos: LookupSet::new(StorageKey::UTXOs),
+            new_transfers: LookupMap::new(StorageKey::NewTransfers),
+            min_nonce: 0,
+            last_nonce: 0,
         }
     }
 
@@ -162,6 +169,12 @@ impl FungibleTokenReceiver for BitcoinConnector {
                       sender_id: AccountId,
                       amount: U128,
                       msg: String) -> PromiseOrValue<U128> {
-        todo!()
+        self.new_transfers.insert(&self.last_nonce, &NewTransferToBitcoin {
+            sender_id,
+            recipient_on_bitcoin: msg,
+            value: amount.0 as u64
+        });
+
+        PromiseOrValue::Value(U128(0))
     }
 }

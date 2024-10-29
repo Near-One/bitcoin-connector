@@ -13,6 +13,7 @@ use btc_types::hash::H256;
 use near_contract_standards::fungible_token::receiver::FungibleTokenReceiver;
 
 const MINT_BTC_GAS: Gas = Gas::from_tgas(10);
+const BURN_BTC_GAS: Gas = Gas::from_tgas(10);
 const VERIFY_TX_GAS: Gas = Gas::from_tgas(100);
 const FT_TRANSFER_CALLBACK_GAS: Gas = Gas::from_tgas(50);
 const MPC_SIGNING_GAS: Gas = Gas::from_tgas(250);
@@ -65,6 +66,7 @@ pub trait ExtOmniBitcoin {
             receiver_id: AccountId,
             amount: U128);
 
+    fn burn(&mut self, amount: U128);
 }
 
 #[ext_contract(ext_btc_light_client)]
@@ -172,8 +174,12 @@ impl FungibleTokenReceiver for BitcoinConnector {
         self.new_transfers.insert(&self.last_nonce, &NewTransferToBitcoin {
             sender_id,
             recipient_on_bitcoin: msg,
-            value: amount.0 as u64
+            value: amount.0.clone() as u64
         });
+
+        ext_omni_bitcoin::ext(self.omni_btc.clone())
+                .with_static_gas(BURN_BTC_GAS)
+                .burn(amount);
 
         PromiseOrValue::Value(U128(0))
     }

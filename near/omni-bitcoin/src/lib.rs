@@ -82,6 +82,11 @@ impl OmniBTC {
     pub fn mint(&mut self, receiver_id: AccountId, amount: U128) {
         self.token.internal_deposit(&receiver_id, Balance::from(amount));
     }
+
+    #[access_control_any(roles(Role::Owner))]
+    pub fn burn(&mut self, amount: U128) {
+        self.token.internal_withdraw(&env::predecessor_account_id(), Balance::from(amount));
+    }
 }
 
 #[near]

@@ -40,7 +40,8 @@ pub enum Role {
 pub struct BitcoinConnector {
     pub bitcoin_pk: String,
     pub omni_btc: AccountId,
-    pub finalised_transfers: LookupSet<H256>
+    pub finalised_transfers: LookupSet<H256>,
+    pub confirmations: u64,
 }
 
 #[ext_contract(ext_omni_bitcoin)]
@@ -54,11 +55,12 @@ pub trait ExtOmniBitcoin {
 #[near]
 impl BitcoinConnector {
     #[init]
-    pub fn new(omni_btc: AccountId) -> Self {
+    pub fn new(omni_btc: AccountId, confirmations: u64) -> Self {
         Self {
             bitcoin_pk: "396e765f3fd99b894caea7e92ebb6d8764ae5cdd".to_string(),
             omni_btc,
             finalised_transfers: LookupSet::new(StorageKey::FinalisedTransfers),
+            confirmations
         }
     }
 

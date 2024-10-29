@@ -11,6 +11,7 @@ use near_sdk::ext_contract;
 use bitcoin_types::transaction::{ConsensusDecoder, NewTransferToBitcoin, Script, Transaction, UTXO};
 use btc_types::hash::H256;
 use near_contract_standards::fungible_token::receiver::FungibleTokenReceiver;
+use bitcoin_types::bitcoin_connector_events::BitcoinConnectorEvent;
 
 const MINT_BTC_GAS: Gas = Gas::from_tgas(10);
 const BURN_BTC_GAS: Gas = Gas::from_tgas(10);
@@ -172,14 +173,20 @@ impl FungibleTokenReceiver for BitcoinConnector {
                       amount: U128,
                       msg: String) -> PromiseOrValue<U128> {
         self.new_transfers.insert(&self.last_nonce, &NewTransferToBitcoin {
-            sender_id,
-            recipient_on_bitcoin: msg,
+            sender_id: sender_id.clone(),
+            recipient_on_bitcoin: msg.clone(),
             value: amount.0.clone() as u64
         });
 
         ext_omni_bitcoin::ext(self.omni_btc.clone())
                 .with_static_gas(BURN_BTC_GAS)
                 .burn(amount);
+
+        env::log_str(&BitcoinConnectorEvent::InitTransferEvent{
+            sender_id,
+            recipient_on_bitcoin: msg,
+            value: amount.0.clone() as u64
+        }.to_log_string());
 
         PromiseOrValue::Value(U128(0))
     }

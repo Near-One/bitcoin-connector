@@ -8,16 +8,20 @@ use near_sdk::json_types::U128;
 use near_sdk::serde::{Deserialize, Serialize};
 use near_sdk::PanicOnDefault;
 use near_sdk::ext_contract;
-use bitcoin_types::transaction::{ConsensusDecoder, Script, Transaction};
+use bitcoin_types::transaction::{ConsensusDecoder, Script, Transaction, UTXO};
 use btc_types::hash::H256;
 
 const MINT_BTC_GAS: Gas = Gas::from_tgas(10);
 const VERIFY_TX_GAS: Gas = Gas::from_tgas(100);
 const FT_TRANSFER_CALLBACK_GAS: Gas = Gas::from_tgas(50);
+const MPC_SIGNING_GAS: Gas = Gas::from_tgas(250);
+
+const SIGN_PATH: &str = "bitcoin-connector-1";
 
 #[derive(BorshSerialize, BorshStorageKey)]
 enum StorageKey {
     FinalisedTransfers,
+    UTXOs,
 }
 
 #[derive(AccessControlRole, Deserialize, Serialize, Copy, Clone)]
@@ -46,6 +50,8 @@ pub struct BitcoinConnector {
     pub finalised_transfers: LookupSet<H256>,
     pub confirmations: u64,
     pub btc_light_client: AccountId,
+    pub mpc_signer: AccountId,
+    pub utxos: LookupSet<UTXO>
 }
 
 #[ext_contract(ext_omni_bitcoin)]
@@ -66,13 +72,18 @@ pub trait ExtBtcLightClient {
 #[near]
 impl BitcoinConnector {
     #[init]
-    pub fn new(omni_btc: AccountId, confirmations: u64, btc_light_client: AccountId) -> Self {
+    pub fn new(omni_btc: AccountId,
+               confirmations: u64,
+               btc_light_client: AccountId,
+               mpc_signer: AccountId) -> Self {
         Self {
             bitcoin_pk: "396e765f3fd99b894caea7e92ebb6d8764ae5cdd".to_string(),
             omni_btc,
             finalised_transfers: LookupSet::new(StorageKey::FinalisedTransfers),
             confirmations,
-            btc_light_client
+            btc_light_client,
+            mpc_signer,
+            utxos: LookupSet::new(StorageKey::UTXOs),
         }
     }
 
@@ -102,16 +113,24 @@ impl BitcoinConnector {
         &mut self,
         #[callback_result] call_result: Result<bool, PromiseError>,
         #[serializer(borsh)] tx: Transaction
-    ) -> Promise {
+    ) {
         require!(call_result.unwrap(), "Failed to verify proof");
 
         let mut value = 0;
         let mut recipient = None;
-        for tx_output in tx.output {
-            match tx_output.script_pubkey {
+        for (i, tx_output) in tx.output.into_iter().enumerate() {
+            match tx_output.script_pubkey.clone() {
                 Script::V0P2wpkh(pk) => {
                     if pk == self.bitcoin_pk {
                         value += tx_output.value;
+                        self.utxos.insert(
+                            &UTXO {
+                                txid: tx.tx_hash.clone(),
+                                vout: i as u32,
+                                value: tx_output.value.clone(),
+                                script_pubkey: tx_output.script_pubkey
+                            }
+                        );
                     }
                 }
                 Script::OpReturn(account) => {
@@ -126,8 +145,11 @@ impl BitcoinConnector {
         require!(self.finalised_transfers.insert(&tx.tx_hash),
             "The transfer is already finalised");
 
-        ext_omni_bitcoin::ext(self.omni_btc.clone())
-            .with_static_gas(MINT_BTC_GAS)
-            .mint(recipient.unwrap().parse().unwrap(), U128::from(value as u128))
+        if let Some(recipient) = recipient {
+            ext_omni_bitcoin::ext(self.omni_btc.clone())
+                .with_static_gas(MINT_BTC_GAS)
+                .mint(recipient.parse().unwrap(), U128::from(value as u128));
+        }
     }
+
 }

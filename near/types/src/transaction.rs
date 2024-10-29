@@ -24,6 +24,14 @@ pub struct TxOut {
     pub script_pubkey: Script,
 }
 
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Debug, BorshSerialize, BorshDeserialize)]
+pub struct UTXO {
+    pub txid: H256,
+    pub vout: u32,
+    pub value: u64,
+    pub script_pubkey: Script,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Ord, BorshSerialize, BorshDeserialize)]
 pub enum Script {
     OpReturn(String),

@@ -10,20 +10,18 @@ use near_sdk::json_types::U128;
 use near_sdk::serde::{Deserialize, Serialize};
 use near_sdk::PanicOnDefault;
 use near_sdk::ext_contract;
-use bitcoin_types::transaction::{ConsensusDecoder, NewTransferToBitcoin, OutPoint, Script, Transaction, TxIn, TxOut, UTXO};
+use bitcoin_types::bitcoin_connector_types::{NewTransferToBitcoin, Script, UTXO};
 use btc_types::hash::H256;
 use near_contract_standards::fungible_token::receiver::FungibleTokenReceiver;
 use bitcoin_types::bitcoin_connector_events::BitcoinConnectorEvent;
 use bitcoin::blockdata::transaction::Transaction as BitcoinTransaction;
 use bitcoin::transaction::Version;
-use bitcoin::{Address, Amount, PrivateKey, sighash, secp256k1, EcdsaSighashType, PublicKey};
+use bitcoin::{Address, Amount, sighash, EcdsaSighashType, PublicKey};
 use bitcoin::hashes::Hash;
 use bitcoin::TxIn as BitcoinTxIn;
 use bitcoin::TxOut as BitcoinTxOut;
-use bitcoin::Script as BitcoinScript;
 use std::default::Default;
 use bitcoin::consensus::{deserialize, serialize};
-use bitcoin::secp256k1::Secp256k1;
 use bitcoin_types::mpc_types::SignatureResponse;
 
 const MINT_BTC_GAS: Gas = Gas::from_tgas(10);
@@ -117,10 +115,10 @@ impl BitcoinConnector {
     }
 
     pub fn fin_transfer(&mut self, #[serializer(borsh)] args: FinTransferArgs) -> Promise {
-        let tx = Transaction::from_bytes(&args.tx_raw, &mut 0).unwrap();
+        let tx: BitcoinTransaction = deserialize(&args.tx_raw).unwrap();
 
         let proof_args = ProofArgs {
-            tx_id: tx.tx_hash.clone(),
+            tx_id: Self::get_tx_id(&tx),
             tx_block_blockhash: args.tx_block_blockhash,
             tx_index: args.tx_index,
             merkle_proof: args.merkle_proof,
@@ -133,7 +131,7 @@ impl BitcoinConnector {
             .then(
                 Self::ext(env::current_account_id())
                     .with_static_gas(FT_TRANSFER_CALLBACK_GAS)
-                    .fin_transfer_callback(tx),
+                    .fin_transfer_callback(args.tx_raw),
             )
     }
 
@@ -141,23 +139,26 @@ impl BitcoinConnector {
     pub fn fin_transfer_callback(
         &mut self,
         #[callback_result] call_result: Result<bool, PromiseError>,
-        #[serializer(borsh)] tx: Transaction
+        #[serializer(borsh)] tx_raw: Vec<u8>
     ) {
         require!(call_result.unwrap(), "Failed to verify proof");
+        let tx: BitcoinTransaction = deserialize(&tx_raw).unwrap();
+        let tx_id = Self::get_tx_id(&tx);
 
         let mut value = 0;
         let mut recipient = None;
         for (i, tx_output) in tx.output.into_iter().enumerate() {
-            match tx_output.script_pubkey.clone() {
+            let script: Script = Script::from_bytes(tx_output.script_pubkey.as_bytes().to_vec()).unwrap();
+            match script.clone() {
                 Script::V0P2wpkh(pk) => {
                     if pk == self.bitcoin_pk {
-                        value += tx_output.value;
+                        value += tx_output.value.to_sat();
                         self.utxos.push(
                             &UTXO {
-                                txid: tx.tx_hash.clone(),
+                                txid: tx_id.clone(),
                                 vout: i as u32,
-                                value: tx_output.value.clone(),
-                                script_pubkey: tx_output.script_pubkey
+                                value: tx_output.value.clone().to_sat(),
+                                script_pubkey: script.clone()
                             }
                         );
                     }
@@ -171,7 +172,7 @@ impl BitcoinConnector {
             }
         }
 
-        require!(self.finalised_transfers.insert(&tx.tx_hash),
+        require!(self.finalised_transfers.insert(&tx_id),
             "The transfer is already finalised");
 
         if let Some(recipient) = recipient {
@@ -209,7 +210,7 @@ impl BitcoinConnector {
     #[private]
     pub fn sign_callback(&mut self,
                          #[callback_result] call_result: Result<SignatureResponse, PromiseError>,
-                         mut ser_tx: Vec<u8>) {
+                         ser_tx: Vec<u8>) {
         let mut unsigned_tx: BitcoinTransaction = deserialize(&ser_tx).unwrap();
 
         let signature = call_result.unwrap();
@@ -228,6 +229,11 @@ impl BitcoinConnector {
 }
 
 impl BitcoinConnector {
+    fn get_tx_id(transaction: &BitcoinTransaction) -> H256 {
+        let tx_id = transaction.compute_ntxid();
+        H256::from(tx_id.to_byte_array())
+    }
+
     fn sign_input(&mut self, unsigned_tx: &BitcoinTransaction, utxo: &UTXO, input_index: usize) -> Vec<u8> {
         let public_key = PublicKey::from_str(&self.bitcoin_pk).unwrap();
 

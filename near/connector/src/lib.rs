@@ -1,7 +1,7 @@
 use std::str::FromStr;
 use bitcoin::absolute::LockTime;
 use btc_types::contract_args::ProofArgs;
-use bitcoin_types::connector_args::FinTransferArgs;
+use bitcoin_types::connector_args::{FinTransferArgs, SignRequest};
 use near_plugins::{access_control, pause, AccessControlRole, AccessControllable, Pausable, Upgradable};
 use near_sdk::borsh::{BorshSerialize, BorshDeserialize};
 use near_sdk::{AccountId, Gas, near, Promise, require, BorshStorageKey, env, PromiseError, PromiseOrValue};
@@ -29,6 +29,7 @@ const BURN_BTC_GAS: Gas = Gas::from_tgas(10);
 const VERIFY_TX_GAS: Gas = Gas::from_tgas(100);
 const FT_TRANSFER_CALLBACK_GAS: Gas = Gas::from_tgas(50);
 const MPC_SIGNING_GAS: Gas = Gas::from_tgas(250);
+const SIGN_TRANSFER_CALLBACK_GAS: Gas = Gas::from_tgas(5);
 
 const SIGN_PATH: &str = "bitcoin-connector-1";
 
@@ -87,6 +88,10 @@ pub trait ExtBtcLightClient {
                                     #[serializer(borsh)] args: ProofArgs) -> bool;
 }
 
+#[ext_contract(ext_signer)]
+pub trait ExtSigner {
+    fn sign(&mut self, request: SignRequest);
+}
 
 #[near]
 impl BitcoinConnector {
@@ -174,12 +179,36 @@ impl BitcoinConnector {
         }
     }
 
-    pub fn sign(&mut self) {
+    #[payable]
+    pub fn sign(&mut self) -> Promise {
         let (unsigned_tx, utxos) = self.get_unsigned_tx();
         let mut msgs_to_sign: Vec<Vec<u8>> = vec![];
         for i in 0..utxos.len() {
             msgs_to_sign.push(self.sign_input(&unsigned_tx, &utxos[i], i));
         }
+
+        ext_signer::ext(self.mpc_signer.clone())
+            .with_static_gas(MPC_SIGNING_GAS)
+            .with_attached_deposit(env::attached_deposit())
+            .sign(SignRequest {
+                payload: msgs_to_sign[0].clone().try_into().unwrap(),
+                path: SIGN_PATH.to_owned(),
+                key_version: 0,
+            })
+            .then(
+                Self::ext(env::current_account_id())
+                    .with_static_gas(SIGN_TRANSFER_CALLBACK_GAS)
+                    .sign_callback(unsigned_tx),
+            )
+    }
+
+    #[private]
+    pub fn sign_callback(&mut self,
+                         #[callback_result] call_result: Result<SignatureResponse, PromiseError>,
+                         unsigned_tx: BitcoinTransaction) {
+        let signature = call_result.unwrap();
+
+        
     }
 }
 

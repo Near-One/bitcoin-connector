@@ -287,7 +287,7 @@ impl BitcoinConnector {
 
         let public_key = PublicKey::from_str(&self.bitcoin_pk).unwrap();
 
-        let change = utxo.value - txout.value.to_sat();
+        let change = utxo.value - txout.value.to_sat() - Self::get_fee();
         let txout_change = BitcoinTxOut {
             value: Amount::from_sat(change),
             script_pubkey: public_key.p2wpkh_script_code().unwrap(),
@@ -312,6 +312,10 @@ impl BitcoinConnector {
         }
 
         self.utxos.swap_remove(max_j)
+    }
+
+    fn get_fee() -> u64 {
+        100
     }
 }
 

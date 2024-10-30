@@ -189,19 +189,15 @@ impl BitcoinConnector {
 
     #[payable]
     pub fn sign(&mut self) -> Promise {
-        let (unsigned_tx, utxos) = self.get_unsigned_tx();
-        let mut msgs_to_sign: Vec<Vec<u8>> = vec![];
-        for i in 0..utxos.len() {
-            msgs_to_sign.push(self.sign_input(&unsigned_tx, &utxos[i], i));
-        }
-
+        let (unsigned_tx, utxo) = self.get_unsigned_tx();
+        let msg_to_sign: Vec<u8> = self.sign_input(&unsigned_tx, &utxo, 0);
         let ser_tx = serialize(&unsigned_tx);
 
         ext_signer::ext(self.mpc_signer.clone())
             .with_static_gas(MPC_SIGNING_GAS)
             .with_attached_deposit(env::attached_deposit())
             .sign(SignRequest {
-                payload: msgs_to_sign[0].clone().try_into().unwrap(),
+                payload: msg_to_sign.clone().try_into().unwrap(),
                 path: SIGN_PATH.to_owned(),
                 key_version: 0,
             })
@@ -265,16 +261,16 @@ impl BitcoinConnector {
         sighash.to_byte_array().to_vec()
     }
 
-    fn get_unsigned_tx(&mut self) -> (BitcoinTransaction, Vec<UTXO>) {
-        let utxos = self.get_utxos();
+    fn get_unsigned_tx(&mut self) -> (BitcoinTransaction, UTXO) {
+        let utxo = self.get_utxo();
         let new_transfer_data = self.new_transfers.get(&self.min_nonce).unwrap();
         self.new_transfers.remove(&self.min_nonce);
         self.min_nonce += 1;
 
         let txin = BitcoinTxIn {
             previous_output: bitcoin::OutPoint {
-                txid: bitcoin::Txid::from_byte_array(utxos[0].txid.clone().0),
-                vout: utxos[0].vout.clone(),
+                txid: bitcoin::Txid::from_byte_array(utxo.txid.clone().0),
+                vout: utxo.vout.clone(),
             },
             script_sig: Default::default(),
             sequence: Default::default(),
@@ -296,11 +292,11 @@ impl BitcoinConnector {
             output: vec![txout],
         };
 
-        (unsigned_tx, utxos)
+        (unsigned_tx, utxo)
     }
 
-    fn get_utxos(&mut self) -> Vec<UTXO> {
-        vec![self.utxos.pop().unwrap()]
+    fn get_utxo(&mut self) -> UTXO {
+        self.utxos.pop().unwrap()
     }
 }
 

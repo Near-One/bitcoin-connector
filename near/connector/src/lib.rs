@@ -22,7 +22,9 @@ use bitcoin::TxIn as BitcoinTxIn;
 use bitcoin::TxOut as BitcoinTxOut;
 use bitcoin::Script as BitcoinScript;
 use std::default::Default;
+use bitcoin::consensus::{deserialize, serialize};
 use bitcoin::secp256k1::Secp256k1;
+use bitcoin_types::mpc_types::SignatureResponse;
 
 const MINT_BTC_GAS: Gas = Gas::from_tgas(10);
 const BURN_BTC_GAS: Gas = Gas::from_tgas(10);
@@ -187,6 +189,8 @@ impl BitcoinConnector {
             msgs_to_sign.push(self.sign_input(&unsigned_tx, &utxos[i], i));
         }
 
+        let ser_tx = serialize(&unsigned_tx);
+
         ext_signer::ext(self.mpc_signer.clone())
             .with_static_gas(MPC_SIGNING_GAS)
             .with_attached_deposit(env::attached_deposit())
@@ -198,17 +202,24 @@ impl BitcoinConnector {
             .then(
                 Self::ext(env::current_account_id())
                     .with_static_gas(SIGN_TRANSFER_CALLBACK_GAS)
-                    .sign_callback(unsigned_tx),
+                    .sign_callback(ser_tx),
             )
     }
 
     #[private]
     pub fn sign_callback(&mut self,
                          #[callback_result] call_result: Result<SignatureResponse, PromiseError>,
-                         unsigned_tx: BitcoinTransaction) {
-        let signature = call_result.unwrap();
+                         mut ser_tx: Vec<u8>) {
+        let mut unsigned_tx: BitcoinTransaction = deserialize(&ser_tx).unwrap();
 
-        
+        let signature = call_result.unwrap();
+        let sig_raw = signature.to_bytes();
+        unsigned_tx.input[0].witness.push(sig_raw);
+
+        let public_key = PublicKey::from_str(&self.bitcoin_pk).unwrap();
+        unsigned_tx.input[0].witness.push(public_key.to_bytes());
+
+        let tx_hex_string = hex::encode(serialize(&unsigned_tx));
     }
 }
 

@@ -96,12 +96,13 @@ pub trait ExtSigner {
 #[near]
 impl BitcoinConnector {
     #[init]
-    pub fn new(omni_btc: AccountId,
+    pub fn new(connector_bitcoin_public_key: String,
+               omni_btc: AccountId,
                confirmations: u64,
                btc_light_client: AccountId,
                mpc_signer: AccountId) -> Self {
         Self {
-            bitcoin_pk: "396e765f3fd99b894caea7e92ebb6d8764ae5cdd".to_string(),
+            bitcoin_pk: connector_bitcoin_public_key,
             omni_btc,
             finalised_transfers: LookupSet::new(StorageKey::FinalisedTransfers),
             confirmations,

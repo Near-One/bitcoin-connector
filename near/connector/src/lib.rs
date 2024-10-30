@@ -285,11 +285,19 @@ impl BitcoinConnector {
             script_pubkey: recipient_address.script_pubkey(),
         };
 
+        let public_key = PublicKey::from_str(&self.bitcoin_pk).unwrap();
+
+        let change = utxo.value - txout.value.to_sat();
+        let txout_change = BitcoinTxOut {
+            value: Amount::from_sat(change),
+            script_pubkey: public_key.p2wpkh_script_code().unwrap(),
+        };
+
         let unsigned_tx = BitcoinTransaction {
             version: Version(2),
             lock_time: LockTime::ZERO,
             input: vec![txin],
-            output: vec![txout],
+            output: vec![txout, txout_change],
         };
 
         (unsigned_tx, utxo)

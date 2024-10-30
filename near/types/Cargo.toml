@@ -12,3 +12,4 @@ hex.workspace = true
 borsh.workspace = true
 serde.workspace = true
 btc-types.workspace = true
+bitcoin = "0.32.2"

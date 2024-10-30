@@ -12,6 +12,12 @@ pub struct Transaction {
     pub tx_hash: H256,
 }
 
+impl Transaction {
+    fn get_sighash(index: u64, signer_pubkey: String, value: u64) {
+
+    }
+}
+
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Debug, BorshSerialize, BorshDeserialize)]
 pub struct TxIn {
     pub previous_output: OutPoint,

@@ -1,3 +1,5 @@
+use std::str::FromStr;
+use bitcoin::absolute::LockTime;
 use btc_types::contract_args::ProofArgs;
 use bitcoin_types::connector_args::FinTransferArgs;
 use near_plugins::{access_control, pause, AccessControlRole, AccessControllable, Pausable, Upgradable};
@@ -12,6 +14,15 @@ use bitcoin_types::transaction::{ConsensusDecoder, NewTransferToBitcoin, OutPoin
 use btc_types::hash::H256;
 use near_contract_standards::fungible_token::receiver::FungibleTokenReceiver;
 use bitcoin_types::bitcoin_connector_events::BitcoinConnectorEvent;
+use bitcoin::blockdata::transaction::Transaction as BitcoinTransaction;
+use bitcoin::transaction::Version;
+use bitcoin::{Address, Amount, PrivateKey, sighash, secp256k1, EcdsaSighashType, PublicKey};
+use bitcoin::hashes::Hash;
+use bitcoin::TxIn as BitcoinTxIn;
+use bitcoin::TxOut as BitcoinTxOut;
+use bitcoin::Script as BitcoinScript;
+use std::default::Default;
+use bitcoin::secp256k1::Secp256k1;
 
 const MINT_BTC_GAS: Gas = Gas::from_tgas(10);
 const BURN_BTC_GAS: Gas = Gas::from_tgas(10);
@@ -165,37 +176,54 @@ impl BitcoinConnector {
 
     pub fn sign(&mut self) {
         let (unsigned_tx, utxos) = self.get_unsigned_tx();
-
+        let mut msgs_to_sign: Vec<Vec<u8>> = vec![];
+        for i in 0..utxos.len() {
+            msgs_to_sign.push(self.sign_input(&unsigned_tx, &utxos[i], i));
+        }
     }
 }
 
 impl BitcoinConnector {
-    fn get_unsigned_tx(&mut self) -> (Transaction, Vec<UTXO>) {
+    fn sign_input(&mut self, unsigned_tx: &BitcoinTransaction, utxo: &UTXO, input_index: usize) -> Vec<u8> {
+        let public_key = PublicKey::from_str(&self.bitcoin_pk).unwrap();
+
+        let mut cache = sighash::SighashCache::new(unsigned_tx);
+        let sighash = cache
+            .p2wpkh_signature_hash(input_index, &public_key.p2wpkh_script_code().unwrap(), Amount::from_sat(utxo.value), EcdsaSighashType::All)
+            .expect("failed to compute sighash");
+
+        sighash.to_byte_array().to_vec()
+    }
+
+    fn get_unsigned_tx(&mut self) -> (BitcoinTransaction, Vec<UTXO>) {
         let utxos = self.get_utxos();
         let new_transfer_data = self.new_transfers.get(&self.min_nonce).unwrap();
         self.new_transfers.remove(&self.min_nonce);
         self.min_nonce += 1;
 
-        let txin = TxIn {
-            previous_output: OutPoint {
-                txid: utxos[0].txid.clone(),
+        let txin = BitcoinTxIn {
+            previous_output: bitcoin::OutPoint {
+                txid: bitcoin::Txid::from_byte_array(utxos[0].txid.clone().0),
                 vout: utxos[0].vout.clone()
             },
-            script_sig: vec![],
-            sequence: 0
+            script_sig: Default::default(),
+            sequence: Default::default(),
+            witness: Default::default()
         };
 
-        let txout = TxOut {
-            value: new_transfer_data.value,
-            script_pubkey: Script::V0P2wpkh(new_transfer_data.recipient_on_bitcoin)
+        let recipient_address = Address::from_str(&new_transfer_data.recipient_on_bitcoin).unwrap();
+        let recipient_address = recipient_address.assume_checked();
+
+        let txout = BitcoinTxOut {
+            value: Amount::from_sat(new_transfer_data.value),
+            script_pubkey: recipient_address.script_pubkey(),
         };
 
-        let unsigned_tx = Transaction {
-            version: 2,
-            lock_time: 0,
+        let unsigned_tx = BitcoinTransaction {
+            version: Version(2),
+            lock_time: LockTime::ZERO,
             input: vec![txin],
             output: vec![txout],
-            tx_hash: Default::default()
         };
 
         (unsigned_tx, utxos)

@@ -1,6 +1,6 @@
 use btc_types::hash::H256;
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
-use near_sdk::serde::{Serialize, Deserialize};
+use near_sdk::serde::{Deserialize, Serialize};
 
 #[derive(BorshDeserialize, BorshSerialize, Clone)]
 pub struct FinTransferArgs {

@@ -1,15 +1,19 @@
 use near_contract_standards::fungible_token::metadata::{
     FungibleTokenMetadata, FungibleTokenMetadataProvider, FT_METADATA_SPEC,
 };
-use near_contract_standards::fungible_token::{Balance, FungibleToken, FungibleTokenCore, FungibleTokenResolver};
+use near_contract_standards::fungible_token::{
+    Balance, FungibleToken, FungibleTokenCore, FungibleTokenResolver,
+};
 use near_contract_standards::storage_management::{
     StorageBalance, StorageBalanceBounds, StorageManagement,
 };
-use near_plugins::{access_control, access_control_any, AccessControlRole, AccessControllable, Pausable, Upgradable};
-use near_sdk::borsh::{BorshSerialize, BorshDeserialize};
-use near_sdk::serde::{Deserialize, Serialize};
+use near_plugins::{
+    access_control, access_control_any, AccessControlRole, AccessControllable, Pausable, Upgradable,
+};
+use near_sdk::borsh::{BorshDeserialize, BorshSerialize};
 use near_sdk::collections::LazyOption;
 use near_sdk::json_types::U128;
+use near_sdk::serde::{Deserialize, Serialize};
 use near_sdk::{
     env, log, near, require, AccountId, BorshStorageKey, NearToken, PanicOnDefault, PromiseOrValue,
 };
@@ -21,7 +25,7 @@ pub enum Role {
     PauseManager,
     UpgradableCodeStager,
     UpgradableCodeDeployer,
-    Owner
+    Owner,
 }
 
 #[near(contract_state)]
@@ -66,7 +70,6 @@ impl OmniBTC {
             decimals: 8,
         };
 
-
         let mut res = Self {
             token: FungibleToken::new(StorageKey::FungibleToken),
             metadata: LazyOption::new(StorageKey::Metadata, Some(&metadata)),
@@ -80,12 +83,14 @@ impl OmniBTC {
 
     #[access_control_any(roles(Role::Owner))]
     pub fn mint(&mut self, receiver_id: AccountId, amount: U128) {
-        self.token.internal_deposit(&receiver_id, Balance::from(amount));
+        self.token
+            .internal_deposit(&receiver_id, Balance::from(amount));
     }
 
     #[access_control_any(roles(Role::Owner))]
     pub fn burn(&mut self, amount: U128) {
-        self.token.internal_withdraw(&env::predecessor_account_id(), Balance::from(amount));
+        self.token
+            .internal_withdraw(&env::predecessor_account_id(), Balance::from(amount));
     }
 }
 

@@ -1,7 +1,7 @@
-use near_sdk::borsh::{BorshSerialize, BorshDeserialize};
-use btc_types::hash::H256;
-use near_sdk::AccountId;
 use crate::bitcoin_connector_types::Script::OpReturn;
+use btc_types::hash::H256;
+use near_sdk::borsh::{BorshDeserialize, BorshSerialize};
+use near_sdk::AccountId;
 
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Debug, BorshSerialize, BorshDeserialize)]
 pub struct UTXO {
@@ -15,7 +15,7 @@ pub struct UTXO {
 pub struct NewTransferToBitcoin {
     pub sender_id: AccountId,
     pub recipient_on_bitcoin: String,
-    pub value: u64
+    pub value: u64,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Ord, BorshSerialize, BorshDeserialize)]
@@ -29,7 +29,9 @@ impl Script {
         const OP_RETURN: u8 = 0x6a;
 
         if script_raw[0] == OP_RETURN {
-            return Ok(OpReturn(String::from_utf8(script_raw[2..].to_vec()).unwrap()));
+            return Ok(OpReturn(
+                String::from_utf8(script_raw[2..].to_vec()).unwrap(),
+            ));
         }
 
         if script_raw[0] == 0x00 && script_raw[1] == 0x14 {

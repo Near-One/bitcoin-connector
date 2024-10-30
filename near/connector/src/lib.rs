@@ -1,28 +1,32 @@
-use std::str::FromStr;
 use bitcoin::absolute::LockTime;
-use btc_types::contract_args::ProofArgs;
+use bitcoin::blockdata::transaction::Transaction as BitcoinTransaction;
+use bitcoin::consensus::{deserialize, serialize};
+use bitcoin::hashes::Hash;
+use bitcoin::transaction::Version;
+use bitcoin::TxIn as BitcoinTxIn;
+use bitcoin::TxOut as BitcoinTxOut;
+use bitcoin::{sighash, Address, Amount, EcdsaSighashType, PublicKey};
+use bitcoin_types::bitcoin_connector_events::BitcoinConnectorEvent;
+use bitcoin_types::bitcoin_connector_types::{NewTransferToBitcoin, Script, UTXO};
 use bitcoin_types::connector_args::{FinTransferArgs, SignRequest};
-use near_plugins::{access_control, pause, AccessControlRole, AccessControllable, Pausable, Upgradable};
-use near_sdk::borsh::{BorshSerialize, BorshDeserialize};
-use near_sdk::{AccountId, Gas, near, Promise, require, BorshStorageKey, env, PromiseError, PromiseOrValue};
+use bitcoin_types::mpc_types::SignatureResponse;
+use btc_types::contract_args::ProofArgs;
+use btc_types::hash::H256;
+use near_contract_standards::fungible_token::receiver::FungibleTokenReceiver;
+use near_plugins::{
+    access_control, pause, AccessControlRole, AccessControllable, Pausable, Upgradable,
+};
+use near_sdk::borsh::{BorshDeserialize, BorshSerialize};
 use near_sdk::collections::{LookupMap, LookupSet, Vector};
+use near_sdk::ext_contract;
 use near_sdk::json_types::U128;
 use near_sdk::serde::{Deserialize, Serialize};
 use near_sdk::PanicOnDefault;
-use near_sdk::ext_contract;
-use bitcoin_types::bitcoin_connector_types::{NewTransferToBitcoin, Script, UTXO};
-use btc_types::hash::H256;
-use near_contract_standards::fungible_token::receiver::FungibleTokenReceiver;
-use bitcoin_types::bitcoin_connector_events::BitcoinConnectorEvent;
-use bitcoin::blockdata::transaction::Transaction as BitcoinTransaction;
-use bitcoin::transaction::Version;
-use bitcoin::{Address, Amount, sighash, EcdsaSighashType, PublicKey};
-use bitcoin::hashes::Hash;
-use bitcoin::TxIn as BitcoinTxIn;
-use bitcoin::TxOut as BitcoinTxOut;
+use near_sdk::{
+    env, near, require, AccountId, BorshStorageKey, Gas, Promise, PromiseError, PromiseOrValue,
+};
 use std::default::Default;
-use bitcoin::consensus::{deserialize, serialize};
-use bitcoin_types::mpc_types::SignatureResponse;
+use std::str::FromStr;
 
 const MINT_BTC_GAS: Gas = Gas::from_tgas(10);
 const BURN_BTC_GAS: Gas = Gas::from_tgas(10);
@@ -75,17 +79,14 @@ pub struct BitcoinConnector {
 
 #[ext_contract(ext_omni_bitcoin)]
 pub trait ExtOmniBitcoin {
-    fn mint(&mut self,
-            receiver_id: AccountId,
-            amount: U128);
+    fn mint(&mut self, receiver_id: AccountId, amount: U128);
 
     fn burn(&mut self, amount: U128);
 }
 
 #[ext_contract(ext_btc_light_client)]
 pub trait ExtBtcLightClient {
-    fn verify_transaction_inclusion(&self,
-                                    #[serializer(borsh)] args: ProofArgs) -> bool;
+    fn verify_transaction_inclusion(&self, #[serializer(borsh)] args: ProofArgs) -> bool;
 }
 
 #[ext_contract(ext_signer)]
@@ -96,11 +97,13 @@ pub trait ExtSigner {
 #[near]
 impl BitcoinConnector {
     #[init]
-    pub fn new(connector_bitcoin_public_key: String,
-               omni_btc: AccountId,
-               confirmations: u64,
-               btc_light_client: AccountId,
-               mpc_signer: AccountId) -> Self {
+    pub fn new(
+        connector_bitcoin_public_key: String,
+        omni_btc: AccountId,
+        confirmations: u64,
+        btc_light_client: AccountId,
+        mpc_signer: AccountId,
+    ) -> Self {
         Self {
             bitcoin_pk: connector_bitcoin_public_key,
             omni_btc,
@@ -123,7 +126,7 @@ impl BitcoinConnector {
             tx_block_blockhash: args.tx_block_blockhash,
             tx_index: args.tx_index,
             merkle_proof: args.merkle_proof,
-            confirmations: self.confirmations.clone()
+            confirmations: self.confirmations.clone(),
         };
 
         ext_btc_light_client::ext(self.btc_light_client.clone())
@@ -140,7 +143,7 @@ impl BitcoinConnector {
     pub fn fin_transfer_callback(
         &mut self,
         #[callback_result] call_result: Result<bool, PromiseError>,
-        #[serializer(borsh)] tx_raw: Vec<u8>
+        #[serializer(borsh)] tx_raw: Vec<u8>,
     ) {
         require!(call_result.unwrap(), "Failed to verify proof");
         let tx: BitcoinTransaction = deserialize(&tx_raw).unwrap();
@@ -149,19 +152,18 @@ impl BitcoinConnector {
         let mut value = 0;
         let mut recipient = None;
         for (i, tx_output) in tx.output.into_iter().enumerate() {
-            let script: Script = Script::from_bytes(tx_output.script_pubkey.as_bytes().to_vec()).unwrap();
+            let script: Script =
+                Script::from_bytes(tx_output.script_pubkey.as_bytes().to_vec()).unwrap();
             match script.clone() {
                 Script::V0P2wpkh(pk) => {
                     if pk == self.bitcoin_pk {
                         value += tx_output.value.to_sat();
-                        self.utxos.push(
-                            &UTXO {
-                                txid: tx_id.clone(),
-                                vout: i as u32,
-                                value: tx_output.value.clone().to_sat(),
-                                script_pubkey: script.clone()
-                            }
-                        );
+                        self.utxos.push(&UTXO {
+                            txid: tx_id.clone(),
+                            vout: i as u32,
+                            value: tx_output.value.clone().to_sat(),
+                            script_pubkey: script.clone(),
+                        });
                     }
                 }
                 Script::OpReturn(account) => {
@@ -173,8 +175,10 @@ impl BitcoinConnector {
             }
         }
 
-        require!(self.finalised_transfers.insert(&tx_id),
-            "The transfer is already finalised");
+        require!(
+            self.finalised_transfers.insert(&tx_id),
+            "The transfer is already finalised"
+        );
 
         if let Some(recipient) = recipient {
             ext_omni_bitcoin::ext(self.omni_btc.clone())
@@ -209,9 +213,11 @@ impl BitcoinConnector {
     }
 
     #[private]
-    pub fn sign_callback(&mut self,
-                         #[callback_result] call_result: Result<SignatureResponse, PromiseError>,
-                         ser_tx: Vec<u8>) {
+    pub fn sign_callback(
+        &mut self,
+        #[callback_result] call_result: Result<SignatureResponse, PromiseError>,
+        ser_tx: Vec<u8>,
+    ) {
         let mut unsigned_tx: BitcoinTransaction = deserialize(&ser_tx).unwrap();
 
         let signature = call_result.unwrap();
@@ -223,9 +229,12 @@ impl BitcoinConnector {
 
         let tx_hex_string = hex::encode(serialize(&unsigned_tx));
 
-        env::log_str(&BitcoinConnectorEvent::SignTransferEvent{
-           bitcoin_tx_hex: tx_hex_string
-        }.to_log_string());
+        env::log_str(
+            &BitcoinConnectorEvent::SignTransferEvent {
+                bitcoin_tx_hex: tx_hex_string,
+            }
+            .to_log_string(),
+        );
     }
 }
 
@@ -235,12 +244,22 @@ impl BitcoinConnector {
         H256::from(tx_id.to_byte_array())
     }
 
-    fn sign_input(&mut self, unsigned_tx: &BitcoinTransaction, utxo: &UTXO, input_index: usize) -> Vec<u8> {
+    fn sign_input(
+        &mut self,
+        unsigned_tx: &BitcoinTransaction,
+        utxo: &UTXO,
+        input_index: usize,
+    ) -> Vec<u8> {
         let public_key = PublicKey::from_str(&self.bitcoin_pk).unwrap();
 
         let mut cache = sighash::SighashCache::new(unsigned_tx);
         let sighash = cache
-            .p2wpkh_signature_hash(input_index, &public_key.p2wpkh_script_code().unwrap(), Amount::from_sat(utxo.value), EcdsaSighashType::All)
+            .p2wpkh_signature_hash(
+                input_index,
+                &public_key.p2wpkh_script_code().unwrap(),
+                Amount::from_sat(utxo.value),
+                EcdsaSighashType::All,
+            )
             .expect("failed to compute sighash");
 
         sighash.to_byte_array().to_vec()
@@ -255,11 +274,11 @@ impl BitcoinConnector {
         let txin = BitcoinTxIn {
             previous_output: bitcoin::OutPoint {
                 txid: bitcoin::Txid::from_byte_array(utxos[0].txid.clone().0),
-                vout: utxos[0].vout.clone()
+                vout: utxos[0].vout.clone(),
             },
             script_sig: Default::default(),
             sequence: Default::default(),
-            witness: Default::default()
+            witness: Default::default(),
         };
 
         let recipient_address = Address::from_str(&new_transfer_data.recipient_on_bitcoin).unwrap();
@@ -285,29 +304,36 @@ impl BitcoinConnector {
     }
 }
 
-
 #[near]
 impl FungibleTokenReceiver for BitcoinConnector {
     #[pause(except(roles(Role::DAO)))]
-    fn ft_on_transfer(&mut self,
-                      sender_id: AccountId,
-                      amount: U128,
-                      msg: String) -> PromiseOrValue<U128> {
-        self.new_transfers.insert(&self.last_nonce, &NewTransferToBitcoin {
-            sender_id: sender_id.clone(),
-            recipient_on_bitcoin: msg.clone(),
-            value: amount.0.clone() as u64
-        });
+    fn ft_on_transfer(
+        &mut self,
+        sender_id: AccountId,
+        amount: U128,
+        msg: String,
+    ) -> PromiseOrValue<U128> {
+        self.new_transfers.insert(
+            &self.last_nonce,
+            &NewTransferToBitcoin {
+                sender_id: sender_id.clone(),
+                recipient_on_bitcoin: msg.clone(),
+                value: amount.0.clone() as u64,
+            },
+        );
 
         ext_omni_bitcoin::ext(self.omni_btc.clone())
-                .with_static_gas(BURN_BTC_GAS)
-                .burn(amount);
+            .with_static_gas(BURN_BTC_GAS)
+            .burn(amount);
 
-        env::log_str(&BitcoinConnectorEvent::InitTransferEvent{
-            sender_id,
-            recipient_on_bitcoin: msg,
-            value: amount.0.clone() as u64
-        }.to_log_string());
+        env::log_str(
+            &BitcoinConnectorEvent::InitTransferEvent {
+                sender_id,
+                recipient_on_bitcoin: msg,
+                value: amount.0.clone() as u64,
+            }
+            .to_log_string(),
+        );
 
         PromiseOrValue::Value(U128(0))
     }

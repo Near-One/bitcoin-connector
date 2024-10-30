@@ -296,7 +296,14 @@ impl BitcoinConnector {
     }
 
     fn get_utxo(&mut self) -> UTXO {
-        self.utxos.pop().unwrap()
+        let mut max_j = 0;
+        for i in 1..self.utxos.len() {
+            if self.utxos.get(i).unwrap().value > self.utxos.get(max_j).unwrap().value {
+                max_j = i;
+            }
+        }
+
+        self.utxos.swap_remove(max_j)
     }
 }
 

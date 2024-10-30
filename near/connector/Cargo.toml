@@ -1,0 +1,20 @@
+[package]
+name = "bitcoin-connector"
+version = "0.1.0"
+authors = ["Olga Kuniavskaia <olga.kuniavskaia@nearone.org>"]
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+near-sdk.workspace = true
+near-contract-standards.workspace = true
+hex.workspace = true
+borsh.workspace = true
+serde.workspace = true
+near-plugins.workspace = true
+bitcoin-types.workspace = true
+btc-types.workspace = true
+bitcoin = "0.32.2"

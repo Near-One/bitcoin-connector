@@ -220,6 +220,10 @@ impl BitcoinConnector {
         unsigned_tx.input[0].witness.push(public_key.to_bytes());
 
         let tx_hex_string = hex::encode(serialize(&unsigned_tx));
+
+        env::log_str(&BitcoinConnectorEvent::SignTransferEvent{
+           bitcoin_tx_hex: tx_hex_string
+        }.to_log_string());
     }
 }
 

@@ -8,6 +8,9 @@ pub enum BitcoinConnectorEvent {
         sender_id: AccountId,
         recipient_on_bitcoin: String,
         value: u64
+    },
+    SignTransferEvent {
+        bitcoin_tx_hex: String,
     }
 }
 
